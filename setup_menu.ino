@@ -106,68 +106,72 @@ void wifi_setup() {
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>2FA-Sidecar Config</title>
-    <script src='https://cdn.tailwindcss.com'></script>
     <style>
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
-        input[type="text"]{background-color:#4a5568;border-color:#718096;color:#f7fafc}
-        input[type="submit"]{background-color:#4299e1;color:white;transition:background-color .2s}
-        input[type="submit"]:hover{background-color:#2b6cb0}
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #1a202c; color: #e2e8f0; margin: 0; padding: 1rem; }
+        .container { max-width: 42rem; margin-left: auto; margin-right: auto; background-color: #2d3748; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); padding: 1.5rem; }
+        header { margin-bottom: 1.5rem; }
+        h2 { font-size: 1.5rem; font-weight: bold; color: #63b3ed; }
+        h3 { font-size: 1.25rem; font-weight: 600; color: #90cdf4; margin-bottom: 1rem; }
+        p.note { color: #a0aec0; margin-bottom: 1.5rem; border-left: 4px solid #f6e05e; padding-left: 1rem; }
+        .form-group { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem; }
+        .form-group label { width: 100%; margin-bottom: 0.25rem; }
+        .form-group input[type="text"] { flex-grow: 1; border-radius: 0.375rem; padding: 0.5rem; border: 1px solid #718096; background-color: #4a5568; color: #f7fafc; width: 100%; }
+        .settings-block { margin-bottom: 1.5rem; padding: 1rem; background-color: #1a202c; border-radius: 0.5rem; }
+        .submit-container { margin-top: 2rem; text-align: center; }
+        input[type="submit"] { width: 100%; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: bold; font-size: 1.125rem; cursor: pointer; border: none; background-color: #4299e1; color: white; transition: background-color 0.2s; }
+        input[type="submit"]:hover { background-color: #2b6cb0; }
+        @media (min-width: 640px) {
+            .form-group label { width: 33.333333%; margin-bottom: 0; }
+            .form-group input[type="text"] { width: auto; }
+            input[type="submit"] { width: auto; }
+        }
     </style>
 </head>
-<body class='bg-gray-800 text-gray-200 p-4 sm:p-6 md:p-8'>
-    <div class='max-w-2xl mx-auto bg-gray-900 rounded-lg shadow-lg p-6'>
-        <header class='mb-6'>
-            <h2 class='text-2xl font-bold text-blue-400'>2FA-Sidecar Configuration</h2>
-            <p class='text-sm text-gray-400 mt-1'>(C) 2024 Matt Perkins & T.Fujiba - GPL</p>
+<body>
+    <div class='container'>
+        <header>
+            <h2>2FA-Sidecar Configuration</h2>
+            <p style="font-size: 0.875rem; color: #a0aec0; margin-top: 0.25rem;">(C) 2024 Matt Perkins & T.Fujiba - GPL</p>
         </header>
-        <p class='text-gray-400 mb-6 border-l-4 border-yellow-500 pl-4'>
-            Current settings are not displayed for security. Fill in only the fields you wish to set or update.
-        </p>
+        <p class='note'>Current settings are not displayed for security. Fill in only the fields you wish to set or update.</p>
         <form action='/get'>
-            <div class='mb-8 p-4 bg-gray-800 rounded-lg'>
-                <h3 class='text-xl font-semibold text-blue-300 mb-4'>General Settings</h3>
-                <div class='flex flex-wrap items-center mb-2'>
-                    <label for='ssid' class='w-full sm:w-1/3 mb-2 sm:mb-0'>SSID:</label>
-                    <input type='text' id='ssid' name='ssid' class='flex-grow rounded-md p-2 border'>
+            <div class='settings-block'>
+                <h3>General Settings</h3>
+                <div class='form-group'>
+                    <label for='ssid'>SSID:</label>
+                    <input type='text' id='ssid' name='ssid'>
                 </div>
-                <div class='flex flex-wrap items-center mb-2'>
-                    <label for='password' class='w-full sm:w-1/3 mb-2 sm:mb-0'>WiFi Password:</label>
-                    <input type='text' id='password' name='password' class='flex-grow rounded-md p-2 border'>
+                <div class='form-group'>
+                    <label for='password'>WiFi Password:</label>
+                    <input type='text' id='password' name='password'>
                 </div>
-                <div class='flex flex-wrap items-center'>
-                    <label for='pin' class='w-full sm:w-1/3 mb-2 sm:mb-0'>Access PIN (4 digits):</label>
-                    <input type='text' id='pin' name='pin' class='flex-grow rounded-md p-2 border'>
+                <div class='form-group'>
+                    <label for='pin'>Access PIN (4 digits):</label>
+                    <input type='text' id='pin' name='pin'>
                 </div>
             </div>
-            <div>
     )rawliteral";
 
     for (int b = 0; b < NUM_BANKS; b++) {
       html +=
-          "<div class='mb-6 p-4 bg-gray-800 rounded-lg'><h3 class='text-xl "
-          "font-semibold text-blue-300 mb-4'>Bank " +
-          String(b + 1) + "</h3>";
+          "<div class='settings-block'><h3'>Bank " + String(b + 1) + "</h3>";
       for (int k = 0; k < NUM_KEYS; k++) {
         String name_key = "tfa_name_" + String(b) + "_" + String(k);
         String seed_key = "tfa_seed_" + String(b) + "_" + String(k);
+        html += "<div class='form-group'><label>Key " + String(k + 1) +
+                " Name:</label><input type='text' name='" + name_key +
+                "'></div>";
         html +=
-            "<div class='flex flex-wrap items-center mb-2'><label "
-            "class='w-full sm:w-1/3 mb-2 sm:mb-0'>2FA Key " +
-            String(k + 1) + " Name:</label><input type='text' name='" +
-            name_key + "' class='flex-grow rounded-md p-2 border'></div>";
-        html +=
-            "<div class='flex flex-wrap items-center mb-4'><label "
-            "class='w-full sm:w-1/3 mb-2 sm:mb-0'>2FA Key " +
+            "<div class='form-group' style='margin-bottom: 1rem;'><label>Key " +
             String(k + 1) + " Seed:</label><input type='text' name='" +
-            seed_key + "' class='flex-grow rounded-md p-2 border'></div>";
+            seed_key + "'></div>";
       }
       html += "</div>";
     }
 
     html += R"rawliteral(
-            </div>
-            <div class='mt-8 text-center'>
-                <input type='submit' value='Save All Settings' class='w-full sm:w-auto px-6 py-3 rounded-lg font-bold text-lg cursor-pointer'>
+            <div class='submit-container'>
+                <input type='submit' value='Save All Settings'>
             </div>
         </form>
     </div>
@@ -185,8 +189,6 @@ void wifi_setup() {
 
     for (int i = 0; i < params; i++) {
       AsyncWebParameter *p = request->getParam(i);
-      // Only save if the value is not empty. This prevents overwriting existing
-      // settings with blank values.
       if (p->value().length() > 0) {
         preferences.putString(p->name().c_str(), p->value());
         log += p->name() + ", ";
@@ -195,8 +197,7 @@ void wifi_setup() {
     }
 
     if (log.length() > 2) {
-      log = log.substring(0,
-                          log.length() - 2);  // Remove trailing comma and space
+      log = log.substring(0, log.length() - 2);
     }
 
     tft.fillScreen(ST77XX_BLUE);
