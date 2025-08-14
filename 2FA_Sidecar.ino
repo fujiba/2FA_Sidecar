@@ -19,10 +19,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 */
-// 2FA Sidecar
-// Matt Perkins & T.Fujiba - Copyright (C) 2024
-// 直接ボタン制御版：PinButtonライブラリの問題を回避
-
 // --- CHOOSE DEVICE MODE ---
 #define MODE_5_KEY 5
 #define MODE_2_KEY 2
@@ -36,7 +32,7 @@
 #define NTP_SERVER "ntp.jst.mfeed.ad.jp"
 #define TZ "JST-9"
 
-const char* mainver = "1.34_final_fix";  // Version updated
+const char* mainver = "1.50f";  // Version updated
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -77,10 +73,10 @@ PinButton key4(10);
 PinButton key5(11);
 #endif
 
-// 銀行切り替えボタン用の直接制御変数
-bool prev_d0_state = HIGH;
-bool prev_d1_state = HIGH;
-bool prev_d2_state = HIGH;
+// バンク切り替えボタン用の直接制御変数
+bool prev_d0_state = HIGH;  // D0は初期状態HIGH（プルアップ）
+bool prev_d1_state = LOW;   // D1は初期状態LOW（プルダウン）
+bool prev_d2_state = LOW;   // D2は初期状態LOW（プルダウン）
 unsigned long last_d0_change = 0;
 unsigned long last_d1_change = 0;
 unsigned long last_d2_change = 0;
@@ -107,7 +103,7 @@ String tfa_seed[NUM_BANKS][NUM_KEYS];
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 Preferences preferences;
 
-// 直接ボタン制御用の関数
+// 直接ボタン制御用の関数（ピンごとに異なる検知方法）
 bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
   bool current_state = digitalRead(pin);
   unsigned long current_time = millis();
@@ -117,13 +113,22 @@ bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
       (current_time - last_change > DEBOUNCE_DELAY)) {
     last_change = current_time;
 
-    // HIGHからLOWに変化（ボタンが押された）場合
-    if (prev_state == HIGH && current_state == LOW) {
-      prev_state = current_state;
+    bool button_pressed = false;
+
+    if (pin == 0) {
+      // D0はプルアップ：HIGHからLOWに変化でボタン押下
+      button_pressed = (prev_state == HIGH && current_state == LOW);
+    } else {
+      // D1, D2はプルダウン：LOWからHIGHに変化でボタン押下
+      button_pressed = (prev_state == LOW && current_state == HIGH);
+    }
+
+    prev_state = current_state;
+
+    if (button_pressed) {
       Serial.printf("Button on pin %d pressed!\n", pin);
       return true;
     }
-    prev_state = current_state;
   }
 
   return false;
@@ -141,10 +146,10 @@ void initializeBankButtons() {
   Serial.printf("D1 (floating): %d\n", digitalRead(1));
   Serial.printf("D2 (floating): %d\n", digitalRead(2));
 
-  // ピンモードを設定
-  pinMode(0, INPUT_PULLUP);
-  pinMode(1, INPUT_PULLDOWN);
-  pinMode(2, INPUT_PULLDOWN);
+  // ピンモードを設定（ハードウェア配線に合わせて）
+  pinMode(0, INPUT_PULLUP);    // D0はプルアップ
+  pinMode(1, INPUT_PULLDOWN);  // D1はプルダウン
+  pinMode(2, INPUT_PULLDOWN);  // D2はプルダウン
 
   // 少し待機してピンが安定するのを待つ
   delay(100);
@@ -337,7 +342,7 @@ void setup() {
   USB.begin();
   delay(2000);
 
-  // ここで銀行切り替えボタンを初期化
+  // ここでバンク切り替えボタンを初期化
   initializeBankButtons();
 
   tft.fillScreen(ST77XX_BLACK);
@@ -356,7 +361,7 @@ void loop() {
   key5.update();
 #endif
 
-  // 銀行切り替えボタンの直接制御
+  // バンク切り替えボタンの直接制御
   bool bank_changed = false;
   if (bank_buttons_initialized) {
     if (checkButtonPress(0, prev_d0_state, last_d0_change) &&
@@ -377,16 +382,6 @@ void loop() {
       bank_changed = true;
       Serial.println("Bank 3 Selected");
     }
-  }
-
-  // デバッグ用：定期的にボタンの状態を表示（必要に応じてコメントアウト）
-  static unsigned long last_debug_print = 0;
-  if (millis() - last_debug_print > 2000) {  // 2秒ごと
-    if (bank_buttons_initialized) {
-      Serial.printf("Button states - D0:%d D1:%d D2:%d\n", digitalRead(0),
-                    digitalRead(1), digitalRead(2));
-    }
-    last_debug_print = millis();
   }
 
   if (bank_changed) {
