@@ -1,14 +1,14 @@
 // 2FA Sidecar
-// Matt Perkins - Copyright (C) 2024
+// Matt Perkins & T.Fujiba - Copyright (C) 2024
 // Spawned out of the need to often type a lot of two factor authentication
 // but still have some security while remaning mostly isolated from the host
 // system. See github for 3D models and wiring diagram.
 /*
 
-    This program is free`                      nmjhsoftware: you can
-   redistribute it and/or modify it under the terms of the GNU General Public
-   License as published by the Free Software Foundation, either version 3 of the
-   License, or (at your option) any later version.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,25 +20,27 @@
 
 */
 
+// --- CHOOSE DEVICE MODE ---
+#define MODE_5_KEY 5
+#define MODE_2_KEY 2
+// Set to MODE_5_KEY or MODE_2_KEY
+#define DEVICE_MODE MODE_2_KEY
+// --------------------------
+
+#define NUM_KEYS DEVICE_MODE
+
 // Change for your country.
-// Adjust to your local time perhaps.
 #define NTP_SERVER "ntp.jst.mfeed.ad.jp"
-// Japan standard time may be needed for clock display in the future.
 #define TZ "JST-9"
 
-// Only other thing to select bellow is if your making the 5 key or 2 key
-// version Default is 5 key.
+const char* mainver = "1.30_multi_key";  // Version updated
 
-const char *mainver = "1.11";
-
-#include <Adafruit_GFX.h>     // Core graphics library
-#include <Adafruit_ST7789.h>  // Hardware-specific library for ST7789
-#include <Preferences.h>      // perstant storage
-#include <SPI.h>
-
-// Misc Fonts
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
 #include <Arduino.h>
-#include <PinButton.h>  // Button Library
+#include <PinButton.h>
+#include <Preferences.h>
+#include <SPI.h>
 #include <USB.h>
 #include <USBHIDKeyboard.h>
 
@@ -46,14 +48,10 @@ const char *mainver = "1.11";
 
 #include "Fonts/FreeMono12pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
-#include "Fonts/FreeSans18pt7b.h"
 #include "Fonts/FreeSans9pt7b.h"
 #ifdef ESP32
 #include <AsyncTCP.h>
 #include <WiFi.h>
-#elif defined(ESP8266)
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
 #endif
 #include <ArduinoOTA.h>
 #include <ESPAsyncWebSrv.h>
@@ -62,116 +60,73 @@ const char *mainver = "1.11";
 
 #include <TOTP-RC6236-generator.hpp>
 
-// Init HID so we look like a keyboard
 USBHIDKeyboard Keyboard;
 
-// Init our 5 keys
-int bargraph_pos;
-int updateotp;
-long time_x;
+// --- MODIFIED: Key definitions based on DEVICE_MODE ---
+const int NUM_BANKS = 3;
+int current_bank = 0;
 
 PinButton key1(5);
 PinButton key2(6);
+#if NUM_KEYS == 5
 PinButton key3(9);
 PinButton key4(10);
 PinButton key5(11);
+#endif
 
-int keytest = 0;
+PinButton d0(0);
+PinButton d1(1);
+PinButton d2(2);
 
-// Select either the 5 key or 2 key version
-// maxkeys = 15 for 5 key
-// maxkeys = 3 for 2 key
-
-int maxkeys = 3;
+int bargraph_pos;
+int updateotp;
+long time_x;
 int sline = 0;
 int pinno = 0;
 String in_pin;
-
-// Incorrect Pin Delay
 int pindelay = 3000;
 
 AsyncWebServer server(80);
 
-// Setup SSID
 String ssid = "Key-Sidecar";
 String password;
 String pin;
 
-String tfa_name_1;
-String tfa_seed_1;
+String tfa_name[NUM_BANKS][NUM_KEYS];
+String tfa_seed[NUM_BANKS][NUM_KEYS];
 
-String tfa_name_2;
-String tfa_seed_2;
-
-String tfa_name_3;
-String tfa_seed_3;
-
-String tfa_name_4;
-String tfa_seed_4;
-
-String tfa_name_5;
-String tfa_seed_5;
-
-// Paramaters wifi
-const char *PARAM_INPUT_1 = "ssid";
-const char *PARAM_INPUT_2 = "password";
-const char *PARAM_INPUT_3 = "pin";
-
-// Paramaters 2FA
-const char *TFA_INPUT_1 = "tfa_name_1";
-const char *TFA_INPUT_2 = "tfa_seed_1";
-
-const char *TFA_INPUT_3 = "tfa_name_2";
-const char *TFA_INPUT_4 = "tfa_seed_2";
-
-const char *TFA_INPUT_5 = "tfa_name_3";
-const char *TFA_INPUT_6 = "tfa_seed_3";
-
-const char *TFA_INPUT_7 = "tfa_name_4";
-const char *TFA_INPUT_8 = "tfa_seed_4";
-
-const char *TFA_INPUT_9 = "tfa_name_5";
-const char *TFA_INPUT_10 = "tfa_seed_5";
-
-// Init Screen
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-
-// Init Preferences
 Preferences preferences;
 
 void setup() {
-  // turn on backlite
+  pinMode(0, INPUT_PULLUP);
+  pinMode(1, INPUT_PULLUP);
+  pinMode(2, INPUT_PULLUP);
+
   pinMode(TFT_BACKLITE, OUTPUT);
   digitalWrite(TFT_BACKLITE, HIGH);
-
-  // turn on the TFT / I2C power supply
   pinMode(TFT_I2C_POWER, OUTPUT);
   digitalWrite(TFT_I2C_POWER, HIGH);
   delay(10);
 
-  // initialize TFT
-  tft.init(135, 240);  // Init ST7789 240x135
+  tft.init(135, 240);
   tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
   tft.setFont(&FreeSans9pt7b);
 
-  // Print Bootup
   tft.setCursor(0, 0);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextWrap(true);
-  tft.printf("\n2FA-Sidecar Ver %s\nBy Matt Perkins (C) 2024\n", mainver);
+  tft.printf("\n2FA-Sidecar Ver %s\nBy Matt Perkins & T.Fujiba\n", mainver);
   tft.printf("Press K1 to enter config/test\n");
 
-  // Check for key and go to setup /test mode
   int lcount = 0;
   while (lcount < 140) {
     key1.update();
-
     if (key1.isClick()) {
       setup_test();
       ESP.restart();
     }
-
     tft.printf(".");
     delay(10);
     lcount++;
@@ -184,28 +139,20 @@ void setup() {
   tft.printf("2FA-Sidecar V%s - startup\n", mainver);
 
   preferences.begin("2FA_Sidecar", false);
-
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
+  pin = preferences.getString("pin", "");
 
-  // load all pramaters
-  tfa_name_1 = preferences.getString("tfa_name_1", "");
-  tfa_seed_1 = preferences.getString("tfa_seed_1", "");
-
-  tfa_name_2 = preferences.getString("tfa_name_2", "");
-  tfa_seed_2 = preferences.getString("tfa_seed_2", "");
-
-  tfa_name_3 = preferences.getString("tfa_name_3", "");
-  tfa_seed_3 = preferences.getString("tfa_seed_3", "");
-
-  tfa_name_4 = preferences.getString("tfa_name_4", "");
-  tfa_seed_4 = preferences.getString("tfa_seed_4", "");
-
-  tfa_name_5 = preferences.getString("tfa_name_5", "");
-  tfa_seed_5 = preferences.getString("tfa_seed_5", "");
+  for (int b = 0; b < NUM_BANKS; b++) {
+    for (int k = 0; k < NUM_KEYS; k++) {
+      String name_key = "tfa_name_" + String(b) + "_" + String(k);
+      String seed_key = "tfa_seed_" + String(b) + "_" + String(k);
+      tfa_name[b][k] = preferences.getString(name_key.c_str(), "");
+      tfa_seed[b][k] = preferences.getString(seed_key.c_str(), "");
+    }
+  }
 
   WiFi.begin(ssid, password);
-
   sline = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -223,68 +170,57 @@ void setup() {
   tft.print("Wifi: ");
   tft.print(WiFi.RSSI());
 
-  // start the NTP client
   configTzTime(TZ, NTP_SERVER);
   tft.println();
   tft.printf("NTP started:%s", TZ);
-
   time_t t = time(NULL);
   tft.printf(":%lld", t);
   tft.println();
 
-  // Check to seee if we have PIN set and ask if we do.
-  pin = preferences.getString("pin", "");
-  const char *npin = pin.c_str();
+  const char* npin = pin.c_str();
   if (strlen(npin) > 3) {
     tft.setCursor(25, 25);
     tft.setFont(&FreeSans12pt7b);
     tft.fillScreen(ST77XX_BLACK);
     tft.setTextColor(ST77XX_YELLOW);
     tft.print("PIN?");
-    // read keys for PIN
 
     while (1) {
-      static unsigned long lst = millis();
-      if (millis() - lst < 1000) {
-        // UPDATE KEYS
-        key1.update();
-        key2.update();
-        key3.update();
-        key4.update();
-        key5.update();
-      }
-
-      lst = millis();
+      key1.update();
+      key2.update();
+#if NUM_KEYS == 5
+      key3.update();
+      key4.update();
+      key5.update();
+#endif
 
       if (key1.isClick()) {
-        pinno = pinno + 1;
-        in_pin = in_pin + "1";
+        pinno++;
+        in_pin += "1";
         tft.print("*");
       }
-
       if (key2.isClick()) {
-        pinno = pinno + 1;
-        in_pin = in_pin + "2";
+        pinno++;
+        in_pin += "2";
         tft.print("*");
       }
-
+#if NUM_KEYS == 5
       if (key3.isClick()) {
-        pinno = pinno + 1;
-        in_pin = in_pin + "3";
+        pinno++;
+        in_pin += "3";
         tft.print("*");
       }
-
       if (key4.isClick()) {
-        pinno = pinno + 1;
-        in_pin = in_pin + "4";
+        pinno++;
+        in_pin += "4";
         tft.print("*");
       }
-
       if (key5.isClick()) {
-        pinno = pinno + 1;
-        in_pin = in_pin + "5";
+        pinno++;
+        in_pin += "5";
         tft.print("*");
       }
+#endif
 
       if (pinno == 4) {
         if (in_pin == npin) {
@@ -299,14 +235,10 @@ void setup() {
         }
       }
     }
-
-  }  // end check PIN
+  }
 
   tft.setTextColor(ST77XX_WHITE);
-
-  // Iniz Keyboard and begin display.
   tft.setFont(&FreeSans9pt7b);
-
   tft.println("Iniz USB keybaord\n");
   Keyboard.begin();
   USB.begin();
@@ -317,162 +249,105 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lst = millis();
-  if (millis() - lst < 1000) {
-    // UPDATE KEYS
-    key1.update();
-    key2.update();
-    key3.update();
-    key4.update();
-    key5.update();
+  key1.update();
+  key2.update();
+#if NUM_KEYS == 5
+  key3.update();
+  key4.update();
+  key5.update();
+#endif
+  d0.update();
+  d1.update();
+  d2.update();
+
+  bool bank_changed = false;
+  if (d0.isClick() && current_bank != 0) {
+    current_bank = 0;
+    bank_changed = true;
+  }
+  if (d1.isClick() && current_bank != 1) {
+    current_bank = 1;
+    bank_changed = true;
+  }
+  if (d2.isClick() && current_bank != 2) {
+    current_bank = 2;
+    bank_changed = true;
   }
 
-  lst = millis();
-
-  // Update Time.
-
-  time_t t = time(NULL);
-
-  if (t < 1000000) {
-    delay(500);
-    return;
-  };
-
-  bargraph_pos = (t % 60);
-  if (bargraph_pos > 29) {
-    bargraph_pos = bargraph_pos - 30;
-  }
-
-  bargraph_pos = bargraph_pos * 3;
-  tft.fillCircle(bargraph_pos + 10, 125, 3,
-                 bargraph_pos < 70 ? ST77XX_GREEN : ST77XX_RED);
-
-  tft.fillRect(0, 0, 2, 125, ST77XX_WHITE);
-
-  if (bargraph_pos == 0) {
+  if (bank_changed) {
     updateotp = 1;
   }
 
-  // Display updated OTP per key
+  time_t t = time(NULL);
+  if (t < 1000000) {
+    delay(100);
+    return;
+  };
+
+  bargraph_pos = (t % 30);
+  bargraph_pos = map(bargraph_pos, 0, 29, 0, 230);
+
+  if (updateotp == 0) {  // Avoid redrawing the whole screen just for the bar
+    tft.fillRect(0, 122, 240, 6, ST77XX_BLACK);  // Clear previous bar
+    tft.fillRect(5, 125, bargraph_pos, 3,
+                 bargraph_pos < 200 ? ST77XX_GREEN : ST77XX_RED);
+  }
+
+  if ((t % 30) == 0) {
+    updateotp = 1;
+  }
 
   if (updateotp == 1) {
     updateotp = 0;
-    tft.setTextColor(ST77XX_YELLOW);
-    tft.setFont(&FreeSans12pt7b);
     tft.fillScreen(ST77XX_BLACK);
 
-    // Key 1
-    if (String *otp1 = TOTP::currentOTP(tfa_seed_1)) {
-      tft.setCursor(3, 17);
-      tft.setTextColor(ST77XX_RED);
-      tft.setFont(&FreeSans12pt7b);
-      tft.print(tfa_name_1);
-      tft.setCursor(140, 17);
-      tft.setTextColor(ST77XX_YELLOW);
-      tft.setFont(&FreeMono12pt7b);
-      tft.println(*otp1);
-    } else {
-      tft.setCursor(3, 17);
-      tft.setTextColor(ST77XX_RED);
-      tft.print("NO VALID CONFIG");
-      delay(10000);
-      ESP.restart();
-    };
+    tft.setCursor(3, 17);
+    tft.setTextColor(ST77XX_CYAN);
+    tft.setFont(&FreeSans9pt7b);
+    tft.printf("Bank %d", current_bank + 1);
 
-    // Key 2
-    if (String *otp2 = TOTP::currentOTP(tfa_seed_2)) {
-      tft.setCursor(3, 40);
-      tft.setTextColor(ST77XX_RED);
-      tft.setFont(&FreeSans12pt7b);
-      tft.print(tfa_name_2);
-      tft.setCursor(140, 40);
-      tft.setTextColor(ST77XX_YELLOW);
-      tft.setFont(&FreeMono12pt7b);
-      tft.println(*otp2);
-    };
-
-    // Key 3
-    if (String *otp3 = TOTP::currentOTP(tfa_seed_3)) {
-      tft.setCursor(3, 63);
-      tft.setTextColor(ST77XX_RED);
-      tft.setFont(&FreeSans12pt7b);
-      tft.print(tfa_name_3);
-      tft.setCursor(140, 63);
-      tft.setTextColor(ST77XX_YELLOW);
-      tft.setFont(&FreeMono12pt7b);
-      tft.println(*otp3);
-    };
-
-    // Key 4
-    if (String *otp4 = TOTP::currentOTP(tfa_seed_4)) {
-      tft.setCursor(3, 86);
-      tft.setTextColor(ST77XX_RED);
-      tft.setFont(&FreeSans12pt7b);
-      tft.print(tfa_name_4);
-      tft.setCursor(140, 86);
-      tft.setTextColor(ST77XX_YELLOW);
-      tft.setFont(&FreeMono12pt7b);
-      tft.println(*otp4);
-    };
-
-    // Key 5
-    if (String *otp5 = TOTP::currentOTP(tfa_seed_5)) {
-      tft.setCursor(3, 109);
-      tft.setTextColor(ST77XX_RED);
-      tft.setFont(&FreeSans12pt7b);
-      tft.print(tfa_name_5);
-      tft.setCursor(140, 109);
-      tft.setTextColor(ST77XX_YELLOW);
-      tft.setFont(&FreeMono12pt7b);
-      tft.println(*otp5);
-    };
-
-    // Make up the rest of the second so we dont fliker the screen.
-    delay(999);
+    for (int i = 0; i < NUM_KEYS; i++) {
+      int y_pos = 40 + (i * 20);
+      if (String* otp = TOTP::currentOTP(tfa_seed[current_bank][i])) {
+        if (tfa_name[current_bank][i].length() > 0) {
+          tft.setCursor(3, y_pos);
+          tft.setTextColor(ST77XX_RED);
+          tft.setFont(&FreeSans12pt7b);
+          tft.print(tfa_name[current_bank][i]);
+          tft.setCursor(140, y_pos);
+          tft.setTextColor(ST77XX_YELLOW);
+          tft.setFont(&FreeMono12pt7b);
+          tft.println(*otp);
+        }
+      } else {
+        if (current_bank == 0 && i == 0 && tfa_seed[0][0].length() == 0) {
+          tft.setCursor(3, 40);
+          tft.setTextColor(ST77XX_RED);
+          tft.setFont(&FreeSans12pt7b);
+          tft.print("NO VALID CONFIG");
+          delay(10000);
+          ESP.restart();
+        }
+      }
+    }
   }
 
-  // check keypress
-  if (key1.isClick()) {
-    String *otp1 = TOTP::currentOTP(tfa_seed_1);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Keyboard.println(*otp1);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
+  auto sendOTP = [&](int key_index) {
+    String* otp = TOTP::currentOTP(tfa_seed[current_bank][key_index]);
+    if (otp && tfa_seed[current_bank][key_index].length() > 0) {
+      pinMode(LED_BUILTIN, OUTPUT);
+      digitalWrite(LED_BUILTIN, HIGH);
+      Keyboard.println(*otp);
+      digitalWrite(LED_BUILTIN, LOW);
+    }
+  };
 
-  if (key2.isClick()) {
-    String *otp2 = TOTP::currentOTP(tfa_seed_2);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Keyboard.println(*otp2);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-
-  if (key3.isClick()) {
-    String *otp3 = TOTP::currentOTP(tfa_seed_3);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Keyboard.println(*otp3);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-
-  if (key4.isClick()) {
-    String *otp4 = TOTP::currentOTP(tfa_seed_4);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Keyboard.println(*otp4);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-
-  if (key5.isClick()) {
-    String *otp5 = TOTP::currentOTP(tfa_seed_5);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Keyboard.println(*otp5);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-  // Hold down k5 to restart.
-  if (key5.isLongClick()) {
-    ESP.restart();
-  }
+  if (key1.isClick()) sendOTP(0);
+  if (key2.isClick()) sendOTP(1);
+#if NUM_KEYS == 5
+  if (key3.isClick()) sendOTP(2);
+  if (key4.isClick()) sendOTP(3);
+  if (key5.isClick()) sendOTP(4);
+  if (key5.isLongClick()) ESP.restart();
+#endif
 }

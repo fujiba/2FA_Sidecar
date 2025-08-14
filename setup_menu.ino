@@ -1,8 +1,5 @@
 // 2FA Sidecar
-// Matt Perkins - Copyright (C) 2023
-// Spawned out of the need to often type a lot of two factor authentication
-// but still have some security while remaning mostly isolated from the host
-// system. See github for 3D models and wiring diagram.
+// Matt Perkins & T.Fujiba - Copyright (C) 2024
 /*
 
     This program is free software: you can redistribute it and/or modify
@@ -23,77 +20,66 @@
 void setup_test() {
   PinButton key1(5);
   PinButton key2(6);
+#if NUM_KEYS == 5
   PinButton key3(9);
   PinButton key4(10);
   PinButton key5(11);
+#endif
 
-  int keytest = 0;
-  tft.fillScreen(ST77XX_RED);
-  delay(500);
-  tft.fillScreen(ST77XX_GREEN);
-  delay(500);
-  tft.fillScreen(ST77XX_BLUE);
-  delay(500);
+  int keytest_flags = 0;
+  int pass_condition = (1 << NUM_KEYS) - 1;  // For 2 keys: 3, for 5 keys: 31
 
   tft.fillScreen(ST77XX_BLACK);
-
   tft.setFont(&FreeSans12pt7b);
   tft.setTextColor(ST77XX_WHITE);
 
-  tft.setCursor(3, 18);
-  tft.print("Key 1");
-
-  tft.setCursor(3, 38);
-  tft.print("Key 2");
-
-  tft.setCursor(3, 58);
-  tft.print("Key 3");
-
-  tft.setCursor(3, 78);
-  tft.print("Key 4");
-
-  tft.setCursor(3, 98);
-  tft.print("Key 5");
+  const char *key_names[] = {"Key 1", "Key 2", "Key 3", "Key 4", "Key 5"};
+  for (int i = 0; i < NUM_KEYS; i++) {
+    tft.setCursor(3, 18 + (i * 20));
+    tft.print(key_names[i]);
+  }
 
   while (1) {
     key1.update();
     key2.update();
+#if NUM_KEYS == 5
     key3.update();
     key4.update();
     key5.update();
+#endif
 
     if (key1.isClick()) {
       tft.setCursor(65, 18);
       tft.print("OK");
-      keytest = keytest + 1;
+      keytest_flags |= 1;
     }
-
     if (key2.isClick()) {
       tft.setCursor(65, 38);
       tft.print("OK");
-      keytest = keytest + 2;
+      keytest_flags |= 2;
     }
+#if NUM_KEYS == 5
     if (key3.isClick()) {
       tft.setCursor(65, 58);
       tft.print("OK");
-      keytest = keytest + 3;
+      keytest_flags |= 4;
     }
     if (key4.isClick()) {
       tft.setCursor(65, 78);
       tft.print("OK");
-      keytest = keytest + 4;
+      keytest_flags |= 8;
     }
     if (key5.isClick()) {
       tft.setCursor(65, 98);
       tft.print("OK");
-      keytest = keytest + 5;
+      keytest_flags |= 16;
     }
+#endif
 
-    if (keytest == maxkeys) {
+    if (keytest_flags == pass_condition) {
       tft.setCursor(105, 58);
       tft.print("Test Pass");
       delay(2000);
-      tft.setCursor(0, 0);
       tft.fillScreen(ST77XX_RED);
       delay(500);
       tft.setTextColor(ST77XX_WHITE);
@@ -112,165 +98,122 @@ void wifi_setup() {
   tft.printf("Connect via Wifi\nSSID:%s\nthen browse to \nhttp://192.168.4.1",
              ssid.c_str());
 
-  // Send web page with input fields to client
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send_P(
-        200, "text/html",
-        "<HEAD><TITLE>Matt's 2FA-Sidecar </TITLE></HEAD><BODY><H2>2FA-Sidecar "
-        "configuration menu - (C) 2023 Matt Perkins - GPL</H2>"
-        "You may submit only one option at a time - current settings are not "
-        "displayed for security.<p>"
-        "<FORM ACTION=\"/get\">SSID: <input type=\"text\" name=\"ssid\"><input "
-        "type=\"submit\" value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">WiFi Password: <input type=\"text\" "
-        "name=\"password\"><input type=\"submit\" value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">Access PIN (4 digits.blank for none) : <input "
-        "type=\"text\" name=\"pin\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang='ja'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>2FA-Sidecar Config</title>
+    <script src='https://cdn.tailwindcss.com'></script>
+    <style>
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+        input[type="text"]{background-color:#4a5568;border-color:#718096;color:#f7fafc}
+        input[type="submit"]{background-color:#4299e1;color:white;transition:background-color .2s}
+        input[type="submit"]:hover{background-color:#2b6cb0}
+    </style>
+</head>
+<body class='bg-gray-800 text-gray-200 p-4 sm:p-6 md:p-8'>
+    <div class='max-w-2xl mx-auto bg-gray-900 rounded-lg shadow-lg p-6'>
+        <header class='mb-6'>
+            <h2 class='text-2xl font-bold text-blue-400'>2FA-Sidecar Configuration</h2>
+            <p class='text-sm text-gray-400 mt-1'>(C) 2024 Matt Perkins & T.Fujiba - GPL</p>
+        </header>
+        <p class='text-gray-400 mb-6 border-l-4 border-yellow-500 pl-4'>
+            Current settings are not displayed for security. Fill in only the fields you wish to set or update.
+        </p>
+        <form action='/get'>
+            <div class='mb-8 p-4 bg-gray-800 rounded-lg'>
+                <h3 class='text-xl font-semibold text-blue-300 mb-4'>General Settings</h3>
+                <div class='flex flex-wrap items-center mb-2'>
+                    <label for='ssid' class='w-full sm:w-1/3 mb-2 sm:mb-0'>SSID:</label>
+                    <input type='text' id='ssid' name='ssid' class='flex-grow rounded-md p-2 border'>
+                </div>
+                <div class='flex flex-wrap items-center mb-2'>
+                    <label for='password' class='w-full sm:w-1/3 mb-2 sm:mb-0'>WiFi Password:</label>
+                    <input type='text' id='password' name='password' class='flex-grow rounded-md p-2 border'>
+                </div>
+                <div class='flex flex-wrap items-center'>
+                    <label for='pin' class='w-full sm:w-1/3 mb-2 sm:mb-0'>Access PIN (4 digits):</label>
+                    <input type='text' id='pin' name='pin' class='flex-grow rounded-md p-2 border'>
+                </div>
+            </div>
+            <div>
+    )rawliteral";
 
-        "<FORM ACTION=\"/get\">2FA Key 1 Name : <input type=\"text\" "
-        "name=\"tfa_name_1\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">2FA Key 1 Seed : <input type=\"text\" "
-        "name=\"tfa_seed_1\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
+    for (int b = 0; b < NUM_BANKS; b++) {
+      html +=
+          "<div class='mb-6 p-4 bg-gray-800 rounded-lg'><h3 class='text-xl "
+          "font-semibold text-blue-300 mb-4'>Bank " +
+          String(b + 1) + "</h3>";
+      for (int k = 0; k < NUM_KEYS; k++) {
+        String name_key = "tfa_name_" + String(b) + "_" + String(k);
+        String seed_key = "tfa_seed_" + String(b) + "_" + String(k);
+        html +=
+            "<div class='flex flex-wrap items-center mb-2'><label "
+            "class='w-full sm:w-1/3 mb-2 sm:mb-0'>2FA Key " +
+            String(k + 1) + " Name:</label><input type='text' name='" +
+            name_key + "' class='flex-grow rounded-md p-2 border'></div>";
+        html +=
+            "<div class='flex flex-wrap items-center mb-4'><label "
+            "class='w-full sm:w-1/3 mb-2 sm:mb-0'>2FA Key " +
+            String(k + 1) + " Seed:</label><input type='text' name='" +
+            seed_key + "' class='flex-grow rounded-md p-2 border'></div>";
+      }
+      html += "</div>";
+    }
 
-        "<FORM ACTION=\"/get\">2FA Key 2 Name : <input type=\"text\" "
-        "name=\"tfa_name_2\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">2FA Key 2 Seed : <input type=\"text\" "
-        "name=\"tfa_seed_2\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-
-        "<FORM ACTION=\"/get\">2FA Key 3 Name : <input type=\"text\" "
-        "name=\"tfa_name_3\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">2FA Key 3 Seed : <input type=\"text\" "
-        "name=\"tfa_seed_3\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-
-        "<FORM ACTION=\"/get\">2FA Key 4 Name : <input type=\"text\" "
-        "name=\"tfa_name_4\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">2FA Key 4 Seed : <input type=\"text\" "
-        "name=\"tfa_seed_4\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-
-        "<FORM ACTION=\"/get\">2FA Key 5 Name : <input type=\"text\" "
-        "name=\"tfa_name_5\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-        "<FORM ACTION=\"/get\">2FA Key 5 Seed : <input type=\"text\" "
-        "name=\"tfa_seed_5\"><input type=\"submit\" "
-        "value=\"Submit\"></form><br>"
-
-        "</BODY></HTML>");
+    html += R"rawliteral(
+            </div>
+            <div class='mt-8 text-center'>
+                <input type='submit' value='Save All Settings' class='w-full sm:w-auto px-6 py-3 rounded-lg font-bold text-lg cursor-pointer'>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
+    )rawliteral";
+    request->send(200, "text/html", html);
   });
 
-  // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
   server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String inputMessage;
-    String inputParam;
-
     preferences.begin("2FA_Sidecar", false);
+    int params = request->params();
+    String log = "";
+    int saved_count = 0;
 
-    // GET input1 value on <ESP_IP>/get?ssid=<inputMessage>
-    if (request->hasParam(PARAM_INPUT_1)) {
-      inputMessage = request->getParam(PARAM_INPUT_1)->value();
-      inputParam = PARAM_INPUT_1;
-      preferences.putString("ssid", inputMessage);
-    }
-    // GET input2 value on <ESP_IP>/get?password=<inputMessage>
-    else if (request->hasParam(PARAM_INPUT_2)) {
-      inputMessage = request->getParam(PARAM_INPUT_2)->value();
-      inputParam = PARAM_INPUT_2;
-      preferences.putString("password", inputMessage);
-    }
-    // GET input3 value on <ESP_IP>/get?pin=<inputMessage>
-    else if (request->hasParam(PARAM_INPUT_3)) {
-      inputMessage = request->getParam(PARAM_INPUT_3)->value();
-      inputParam = PARAM_INPUT_3;
-      preferences.putString("pin", inputMessage);
+    for (int i = 0; i < params; i++) {
+      AsyncWebParameter *p = request->getParam(i);
+      // Only save if the value is not empty. This prevents overwriting existing
+      // settings with blank values.
+      if (p->value().length() > 0) {
+        preferences.putString(p->name().c_str(), p->value());
+        log += p->name() + ", ";
+        saved_count++;
+      }
     }
 
-    // Key 1
-    // GET name 1
-    else if (request->hasParam(TFA_INPUT_1)) {
-      inputMessage = request->getParam(TFA_INPUT_1)->value();
-      inputParam = TFA_INPUT_1;
-      preferences.putString("tfa_name_1", inputMessage);
-    }
-    // GET name 2
-    else if (request->hasParam(TFA_INPUT_2)) {
-      inputMessage = request->getParam(TFA_INPUT_2)->value();
-      inputParam = TFA_INPUT_2;
-      preferences.putString("tfa_seed_1", inputMessage);
+    if (log.length() > 2) {
+      log = log.substring(0,
+                          log.length() - 2);  // Remove trailing comma and space
     }
 
-    // Key 2
-    // GET name 3
-    else if (request->hasParam(TFA_INPUT_3)) {
-      inputMessage = request->getParam(TFA_INPUT_3)->value();
-      inputParam = TFA_INPUT_3;
-      preferences.putString("tfa_name_2", inputMessage);
-    }
-    // GET name 4
-    else if (request->hasParam(TFA_INPUT_4)) {
-      inputMessage = request->getParam(TFA_INPUT_4)->value();
-      inputParam = TFA_INPUT_4;
-      preferences.putString("tfa_seed_2", inputMessage);
-    }
-
-    // Key 3
-    // GET name 5
-    else if (request->hasParam(TFA_INPUT_5)) {
-      inputMessage = request->getParam(TFA_INPUT_5)->value();
-      inputParam = TFA_INPUT_5;
-      preferences.putString("tfa_name_3", inputMessage);
-    }
-    // GET name 6
-    else if (request->hasParam(TFA_INPUT_6)) {
-      inputMessage = request->getParam(TFA_INPUT_6)->value();
-      inputParam = TFA_INPUT_6;
-      preferences.putString("tfa_seed_3", inputMessage);
-    }
-
-    // Key 4
-    // GET name 7
-    else if (request->hasParam(TFA_INPUT_7)) {
-      inputMessage = request->getParam(TFA_INPUT_7)->value();
-      inputParam = TFA_INPUT_7;
-      preferences.putString("tfa_name_4", inputMessage);
-    }
-    // GET name 8
-    else if (request->hasParam(TFA_INPUT_8)) {
-      inputMessage = request->getParam(TFA_INPUT_8)->value();
-      inputParam = TFA_INPUT_8;
-      preferences.putString("tfa_seed_4", inputMessage);
-    }
-
-    // Key 5
-    // GET name 9
-    else if (request->hasParam(TFA_INPUT_9)) {
-      inputMessage = request->getParam(TFA_INPUT_9)->value();
-      inputParam = TFA_INPUT_9;
-      preferences.putString("tfa_name_5", inputMessage);
-    }
-    // GET name 10
-    else if (request->hasParam(TFA_INPUT_10)) {
-      inputMessage = request->getParam(TFA_INPUT_10)->value();
-      inputParam = TFA_INPUT_10;
-      preferences.putString("tfa_seed_5", inputMessage);
-    }
-
-    else {
-      inputMessage = "No message sent";
-      inputParam = "none";
-    }
+    tft.fillScreen(ST77XX_BLUE);
+    tft.setCursor(5, 30);
+    tft.printf("%d parameters saved.\nRebooting...", saved_count);
 
     request->send(200, "text/html",
-                  "Setting preferences (" + inputParam +
-                      ") with value: " + inputMessage +
-                      "<br><a href=\"/\">Return to Home configuration</a>");
+                  "<!DOCTYPE html><html><head><title>Saved</title><meta "
+                  "http-equiv='refresh' content='3;url=/'></head><body>"
+                  "<h2>" +
+                      String(saved_count) +
+                      " settings saved.</h2><p>Device is rebooting. You can "
+                      "close this window.</p>"
+                      "<p>Saved: " +
+                      log + "</p></body></html>");
+    delay(3000);
+    ESP.restart();
   });
 
   server.onNotFound(notFound);
