@@ -19,6 +19,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 */
+// 2FA Sidecar
+// Matt Perkins & T.Fujiba - Copyright (C) 2024
+// 直接ボタン制御版：PinButtonライブラリの問題を回避
 
 // --- CHOOSE DEVICE MODE ---
 #define MODE_5_KEY 5
@@ -65,6 +68,7 @@ USBHIDKeyboard Keyboard;
 const int NUM_BANKS = 3;
 int current_bank = 0;
 
+// 既存のキーボタン（PinButtonを維持）
 PinButton key1(5);
 PinButton key2(6);
 #if NUM_KEYS == 5
@@ -73,10 +77,15 @@ PinButton key4(10);
 PinButton key5(11);
 #endif
 
-// --- MODIFIED: Re-instated PinButton for bank switching ---
-PinButton d0(0);
-PinButton d1(1);
-PinButton d2(2);
+// 銀行切り替えボタン用の直接制御変数
+bool prev_d0_state = HIGH;
+bool prev_d1_state = HIGH;
+bool prev_d2_state = HIGH;
+unsigned long last_d0_change = 0;
+unsigned long last_d1_change = 0;
+unsigned long last_d2_change = 0;
+const unsigned long DEBOUNCE_DELAY = 50;
+bool bank_buttons_initialized = false;
 
 int bargraph_pos;
 int updateotp;
@@ -98,16 +107,71 @@ String tfa_seed[NUM_BANKS][NUM_KEYS];
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 Preferences preferences;
 
+// 直接ボタン制御用の関数
+bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
+  bool current_state = digitalRead(pin);
+  unsigned long current_time = millis();
+
+  // 状態が変化した場合
+  if (current_state != prev_state &&
+      (current_time - last_change > DEBOUNCE_DELAY)) {
+    last_change = current_time;
+
+    // HIGHからLOWに変化（ボタンが押された）場合
+    if (prev_state == HIGH && current_state == LOW) {
+      prev_state = current_state;
+      Serial.printf("Button on pin %d pressed!\n", pin);
+      return true;
+    }
+    prev_state = current_state;
+  }
+
+  return false;
+}
+
+void initializeBankButtons() {
+  Serial.println("Initializing bank buttons...");
+
+  // デバッグ用：ピンの状態を確認
+  Serial.println("--- Pin states before initialization ---");
+  pinMode(0, INPUT);
+  pinMode(1, INPUT);
+  pinMode(2, INPUT);
+  Serial.printf("D0 (floating): %d\n", digitalRead(0));
+  Serial.printf("D1 (floating): %d\n", digitalRead(1));
+  Serial.printf("D2 (floating): %d\n", digitalRead(2));
+
+  // ピンモードを設定
+  pinMode(0, INPUT_PULLUP);
+  pinMode(1, INPUT_PULLDOWN);
+  pinMode(2, INPUT_PULLDOWN);
+
+  // 少し待機してピンが安定するのを待つ
+  delay(100);
+
+  // 初期状態を読み取って記録
+  prev_d0_state = digitalRead(0);
+  prev_d1_state = digitalRead(1);
+  prev_d2_state = digitalRead(2);
+
+  Serial.printf("Initial states - D0: %d, D1: %d, D2: %d\n", prev_d0_state,
+                prev_d1_state, prev_d2_state);
+
+  // 変化タイムスタンプを初期化
+  last_d0_change = millis();
+  last_d1_change = millis();
+  last_d2_change = millis();
+
+  bank_buttons_initialized = true;
+  Serial.println("Bank buttons initialized successfully.");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
     delay(10);
   }
   Serial.println("2FA Sidecar Booting...");
-
-  pinMode(0, INPUT_PULLUP);
-  pinMode(1, INPUT_PULLUP);
-  pinMode(2, INPUT_PULLUP);
 
   pinMode(TFT_BACKLITE, OUTPUT);
   digitalWrite(TFT_BACKLITE, HIGH);
@@ -272,6 +336,10 @@ void setup() {
   Keyboard.begin();
   USB.begin();
   delay(2000);
+
+  // ここで銀行切り替えボタンを初期化
+  initializeBankButtons();
+
   tft.fillScreen(ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
   updateotp = 1;
@@ -279,7 +347,7 @@ void setup() {
 }
 
 void loop() {
-  // Update all key states at the beginning of the loop
+  // 既存のキーボタンの更新（PinButtonを維持）
   key1.update();
   key2.update();
 #if NUM_KEYS == 5
@@ -287,25 +355,38 @@ void loop() {
   key4.update();
   key5.update();
 #endif
-  d0.update();
-  d1.update();
-  d2.update();
 
+  // 銀行切り替えボタンの直接制御
   bool bank_changed = false;
-  if (d0.isClick() && current_bank != 0) {
-    current_bank = 0;
-    bank_changed = true;
-    Serial.println("Bank 1 Selected");
+  if (bank_buttons_initialized) {
+    if (checkButtonPress(0, prev_d0_state, last_d0_change) &&
+        current_bank != 0) {
+      current_bank = 0;
+      bank_changed = true;
+      Serial.println("Bank 1 Selected");
+    }
+    if (checkButtonPress(1, prev_d1_state, last_d1_change) &&
+        current_bank != 1) {
+      current_bank = 1;
+      bank_changed = true;
+      Serial.println("Bank 2 Selected");
+    }
+    if (checkButtonPress(2, prev_d2_state, last_d2_change) &&
+        current_bank != 2) {
+      current_bank = 2;
+      bank_changed = true;
+      Serial.println("Bank 3 Selected");
+    }
   }
-  if (d1.isClick() && current_bank != 1) {
-    current_bank = 1;
-    bank_changed = true;
-    Serial.println("Bank 2 Selected");
-  }
-  if (d2.isClick() && current_bank != 2) {
-    current_bank = 2;
-    bank_changed = true;
-    Serial.println("Bank 3 Selected");
+
+  // デバッグ用：定期的にボタンの状態を表示（必要に応じてコメントアウト）
+  static unsigned long last_debug_print = 0;
+  if (millis() - last_debug_print > 2000) {  // 2秒ごと
+    if (bank_buttons_initialized) {
+      Serial.printf("Button states - D0:%d D1:%d D2:%d\n", digitalRead(0),
+                    digitalRead(1), digitalRead(2));
+    }
+    last_debug_print = millis();
   }
 
   if (bank_changed) {
