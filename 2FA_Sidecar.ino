@@ -1,5 +1,5 @@
 // 2FA Sidecar
-// Matt Perkins & T.Fujiba - Copyright (C) 2024
+// Matt Perkins & fujiba - Copyright (C) 2024-2025
 // Spawned out of the need to often type a lot of two factor authentication
 // but still have some security while remaning mostly isolated from the host
 // system. See github for 3D models and wiring diagram.
@@ -65,7 +65,7 @@ USBHIDKeyboard Keyboard;
 const int NUM_BANKS = 3;
 int current_bank = 0;
 
-// 既存のキーボタン（PinButtonを維持）
+// Existing key buttons (maintaining PinButton)
 PinButton key1(5);
 PinButton key2(6);
 #if NUM_KEYS == 5
@@ -74,10 +74,10 @@ PinButton key4(10);
 PinButton key5(11);
 #endif
 
-// バンク切り替えボタン用の直接制御変数
-bool prev_d0_state = HIGH;  // D0は初期状態HIGH（プルアップ）
-bool prev_d1_state = LOW;   // D1は初期状態LOW（プルダウン）
-bool prev_d2_state = LOW;   // D2は初期状態LOW（プルダウン）
+// Direct control variables for bank switching buttons
+bool prev_d0_state = HIGH;  // D0 initial state is HIGH (pull-up)
+bool prev_d1_state = LOW;   // D1 initial state is LOW (pull-down)
+bool prev_d2_state = LOW;   // D2 initial state is LOW (pull-down)
 unsigned long last_d0_change = 0;
 unsigned long last_d1_change = 0;
 unsigned long last_d2_change = 0;
@@ -105,12 +105,12 @@ String tfa_seed[NUM_BANKS][NUM_KEYS];
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 Preferences preferences;
 
-// 直接ボタン制御用の関数（ピンごとに異なる検知方法）
+// Function for direct button control (different detection method for each pin)
 bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
   bool current_state = digitalRead(pin);
   unsigned long current_time = millis();
 
-  // 状態が変化した場合
+  // If the state has changed
   if (current_state != prev_state &&
       (current_time - last_change > DEBOUNCE_DELAY)) {
     last_change = current_time;
@@ -118,10 +118,10 @@ bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
     bool button_pressed = false;
 
     if (pin == 0) {
-      // D0はプルアップ：HIGHからLOWに変化でボタン押下
+      // D0 is pull-up: button press on HIGH to LOW change
       button_pressed = (prev_state == HIGH && current_state == LOW);
     } else {
-      // D1, D2はプルダウン：LOWからHIGHに変化でボタン押下
+      // D1, D2 are pull-down: button press on LOW to HIGH change
       button_pressed = (prev_state == LOW && current_state == HIGH);
     }
 
@@ -139,7 +139,7 @@ bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
 void initializeBankButtons() {
   Serial.println("Initializing bank buttons...");
 
-  // デバッグ用：ピンの状態を確認
+  // For debugging: check pin states
   Serial.println("--- Pin states before initialization ---");
   pinMode(0, INPUT);
   pinMode(1, INPUT);
@@ -148,15 +148,15 @@ void initializeBankButtons() {
   Serial.printf("D1 (floating): %d\n", digitalRead(1));
   Serial.printf("D2 (floating): %d\n", digitalRead(2));
 
-  // ピンモードを設定（ハードウェア配線に合わせて）
-  pinMode(0, INPUT_PULLUP);    // D0はプルアップ
-  pinMode(1, INPUT_PULLDOWN);  // D1はプルダウン
-  pinMode(2, INPUT_PULLDOWN);  // D2はプルダウン
+  // Set pin modes (according to hardware wiring)
+  pinMode(0, INPUT_PULLUP);    // D0 is pull-up
+  pinMode(1, INPUT_PULLDOWN);  // D1 is pull-down
+  pinMode(2, INPUT_PULLDOWN);  // D2 is pull-down
 
-  // 少し待機してピンが安定するのを待つ
+  // Wait a bit for the pins to stabilize
   delay(100);
 
-  // 初期状態を読み取って記録
+  // Read and record the initial states
   prev_d0_state = digitalRead(0);
   prev_d1_state = digitalRead(1);
   prev_d2_state = digitalRead(2);
@@ -164,7 +164,7 @@ void initializeBankButtons() {
   Serial.printf("Initial states - D0: %d, D1: %d, D2: %d\n", prev_d0_state,
                 prev_d1_state, prev_d2_state);
 
-  // 変化タイムスタンプを初期化
+  // Initialize the change timestamps
   last_d0_change = millis();
   last_d1_change = millis();
   last_d2_change = millis();
@@ -205,7 +205,7 @@ void setup() {
   tft.setCursor(0, 0);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextWrap(true);
-  tft.printf("\n2FA-Sidecar Ver %s\nBy Matt Perkins & T.Fujiba\n", mainver);
+  tft.printf("\n2FA-Sidecar Ver %s\nBy Matt Perkins & fujiba\n", mainver);
   tft.printf("Press K1 to enter config/test\n");
   Serial.println("Boot screen displayed. Waiting for K1 press...");
 
@@ -344,7 +344,7 @@ void setup() {
   USB.begin();
   delay(2000);
 
-  // ここでバンク切り替えボタンを初期化
+  // Initialize bank switching buttons here
   initializeBankButtons();
 
   tft.fillScreen(ST77XX_BLACK);
@@ -354,7 +354,7 @@ void setup() {
 }
 
 void loop() {
-  // 既存のキーボタンの更新（PinButtonを維持）
+  // Update existing key buttons (maintaining PinButton)
   key1.update();
   key2.update();
 #if NUM_KEYS == 5
@@ -363,7 +363,7 @@ void loop() {
   key5.update();
 #endif
 
-  // バンク切り替えボタンの直接制御
+  // Direct control of bank switching buttons
   bool bank_changed = false;
   if (bank_buttons_initialized) {
     if (checkButtonPress(0, prev_d0_state, last_d0_change) &&
@@ -452,6 +452,12 @@ void loop() {
           tft.print("NO VALID CONFIG");
           delay(10000);
           ESP.restart();
+        }
+        if (full_redraw) {
+          tft.setCursor(3, y_pos);
+          tft.setTextColor(ST77XX_RED);
+          tft.setFont(&FreeSans12pt7b);
+          tft.print("UNSET");
         }
       }
     }

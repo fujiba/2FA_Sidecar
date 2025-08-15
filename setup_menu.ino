@@ -1,5 +1,5 @@
 // 2FA Sidecar
-// Matt Perkins & T.Fujiba - Copyright (C) 2024
+// Matt Perkins & fujiba - Copyright (C) 2024-2025
 /*
 
     This program is free software: you can redistribute it and/or modify
@@ -19,29 +19,65 @@
 
 const char HTML_HEADER[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
-<html lang='ja'>
+<html lang='en'>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>2FA-Sidecar Config</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #1a202c; color: #e2e8f0; margin: 0; padding: 1rem; }
+        .container { max-width: 42rem; margin-left: auto; margin-right: auto; background-color: #2d3748; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); padding: 1.5rem; }
+        header { margin-bottom: 1.5rem; }
+        h2 { font-size: 1.5rem; font-weight: bold; color: #63b3ed; }
+        h3 { font-size: 1.25rem; font-weight: 600; color: #90cdf4; margin-bottom: 1rem; }
+        p.note { color: #a0aec0; margin-bottom: 1.5rem; border-left: 4px solid #f6e05e; padding-left: 1rem; }
+        .form-group { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem; }
+        .form-group label { width: 100%; margin-bottom: 0.25rem; }
+        .form-group input[type="text"] { flex-grow: 1; border-radius: 0.375rem; padding: 0.5rem; border: 1px solid #718096; background-color: #4a5568; color: #f7fafc; width: 100%; }
+        .settings-block { margin-bottom: 1.5rem; padding: 1rem; background-color: #1a202c; border-radius: 0.5rem; }
+        .submit-container { margin-top: 2rem; text-align: center; }
+        input[type="submit"] { width: 100%; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: bold; font-size: 1.125rem; cursor: pointer; border: none; background-color: #4299e1; color: white; transition: background-color 0.2s; }
+        input[type="submit"]:hover { background-color: #2b6cb0; }
+        @media (min-width: 640px) {
+            .form-group label { width: 33.333333%; margin-bottom: 0; }
+            .form-group input[type="text"] { width: auto; }
+            input[type="submit"] { width: auto; }
+        }
+    </style>
 </head>
 <body>
-    <h2>2FA-Sidecar Configuration</h2>
-    <p>(C) 2024 Matt Perkins & T.Fujiba - GPL</p>
-    <hr>
-    <p><i>Fill in only the fields you wish to set or update.</i></p>
-    <form action='/get'>
-        <h3>General Settings</h3>
-        <p>SSID: <input type='text' name='ssid'></p>
-        <p>WiFi Password: <input type='text' name='password'></p>
-        <p>Access PIN (4 digits): <input type='text' name='pin'></p>
-        <hr>
+    <div class='container'>
+        <header>
+            <h2>2FA-Sidecar Configuration</h2>
+            <p style="font-size: 0.875rem; color: #a0aec0; margin-top: 0.25rem;">(C) 2024 Matt Perkins & fujiba - GPL</p>
+        </header>
+        <p class='note'>Current settings are not displayed for security. Fill in only the fields you wish to set or update.</p>
+        <form action='/get'>
+            <div class='settings-block'>
+                <h3>General Settings</h3>
+                <div class='form-group'>
+                    <label for='ssid'>SSID:</label>
+                    <input type='text' id='ssid' name='ssid'>
+                </div>
+                <div class='form-group'>
+                    <label for='password'>WiFi Password:</label>
+                    <input type='text' id='password' name='password'>
+                </div>
+                <div class='form-group'>
+                    <label for='pin'>Access PIN (4 digits):</label>
+                    <input type='text' id='pin' name='pin'>
+                </div>
+            </div>
+            <div>
 )rawliteral";
 
 const char HTML_FOOTER[] PROGMEM = R"rawliteral(
-        <br>
-        <input type='submit' value='Save All Settings' style='font-size: 1.2em; padding: 10px;'>
-    </form>
+            </div>
+            <div class='submit-container'>
+                <input type='submit' value='Save All Settings'>
+            </div>
+        </form>
+    </div>
 </body>
 </html>
 )rawliteral";
@@ -135,21 +171,30 @@ void wifi_setup() {
   Serial.println("Setting up server routes...");
   server.on("/", HTTP_GET, []() {
     String html = FPSTR(HTML_HEADER);
+
     for (int b = 0; b < NUM_BANKS; b++) {
-      html += "<h3>Bank " + String(b + 1) + "</h3>";
+      String bank_html =
+          "<div class='settings-block'><h3>Bank " + String(b + 1) + "</h3>";
+      html += bank_html;
+
       for (int k = 0; k < NUM_KEYS; k++) {
         char name_key[20];
         char seed_key[20];
         sprintf(name_key, "tfa_name_%d_%d", b, k);
         sprintf(seed_key, "tfa_seed_%d_%d", b, k);
-        html += "<p>Key " + String(k + 1) + " Name: <input type='text' name='" +
-                name_key + "'></p>";
-        html += "<p>Key " + String(k + 1) + " Seed: <input type='text' name='" +
-                seed_key + "'></p>";
+        String key_html =
+            "<div class='form-group'><label>Key " + String(k + 1) +
+            " Name:</label><input type='text' name='" + name_key + "'></div>";
+        key_html +=
+            "<div class='form-group' style='margin-bottom: 1rem;'><label>Key " +
+            String(k + 1) + " Seed:</label><input type='text' name='" +
+            seed_key + "'></div>";
+        html += key_html;
       }
-      html += "<hr>";
+      html += "</div>";
     }
-    html += FPSTR(HTML_FOOTER);
+
+    html += HTML_FOOTER;
     server.send(200, "text/html", html);
   });
   Serial.println("'/' route configured.");
