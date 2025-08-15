@@ -26,6 +26,11 @@
 #define DEVICE_MODE MODE_2_KEY
 // --------------------------
 
+// --- DEBUG LOGGING for Arduino IDE ---
+// Uncomment the line below to enable serial debug logging.
+// Comment it out to disable.
+// #define DEBUG_LOG_ENABLED
+
 #define NUM_KEYS DEVICE_MODE
 
 // Change for your country.
@@ -53,12 +58,13 @@ const char* mainver = "1.50f";  // Version updated
 #include <WiFi.h>
 #endif
 #include <ArduinoOTA.h>
-// #include <ESPAsyncWebSrv.h>
 #include <ESPmDNS.h>
 #include <WebServer.h>
 #include <lwip/apps/sntp.h>
 
 #include <TOTP-RC6236-generator.hpp>
+
+#include "debug_log.h"
 
 USBHIDKeyboard Keyboard;
 
@@ -92,7 +98,6 @@ int pinno = 0;
 String in_pin;
 int pindelay = 3000;
 
-// AsyncWebServer server(80);
 WebServer server(80);
 
 String ssid = "Key-Sidecar";
@@ -128,7 +133,7 @@ bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
     prev_state = current_state;
 
     if (button_pressed) {
-      Serial.printf("Button on pin %d pressed!\n", pin);
+      D_PRINTF("Button on pin %d pressed!\n", pin);
       return true;
     }
   }
@@ -137,16 +142,16 @@ bool checkButtonPress(int pin, bool& prev_state, unsigned long& last_change) {
 }
 
 void initializeBankButtons() {
-  Serial.println("Initializing bank buttons...");
+  D_PRINTLN("Initializing bank buttons...");
 
   // For debugging: check pin states
-  Serial.println("--- Pin states before initialization ---");
+  D_PRINTLN("--- Pin states before initialization ---");
   pinMode(0, INPUT);
   pinMode(1, INPUT);
   pinMode(2, INPUT);
-  Serial.printf("D0 (floating): %d\n", digitalRead(0));
-  Serial.printf("D1 (floating): %d\n", digitalRead(1));
-  Serial.printf("D2 (floating): %d\n", digitalRead(2));
+  D_PRINTF("D0 (floating): %d\n", digitalRead(0));
+  D_PRINTF("D1 (floating): %d\n", digitalRead(1));
+  D_PRINTF("D2 (floating): %d\n", digitalRead(2));
 
   // Set pin modes (according to hardware wiring)
   pinMode(0, INPUT_PULLUP);    // D0 is pull-up
@@ -161,8 +166,8 @@ void initializeBankButtons() {
   prev_d1_state = digitalRead(1);
   prev_d2_state = digitalRead(2);
 
-  Serial.printf("Initial states - D0: %d, D1: %d, D2: %d\n", prev_d0_state,
-                prev_d1_state, prev_d2_state);
+  D_PRINTF("Initial states - D0: %d, D1: %d, D2: %d\n", prev_d0_state,
+           prev_d1_state, prev_d2_state);
 
   // Initialize the change timestamps
   last_d0_change = millis();
@@ -170,15 +175,15 @@ void initializeBankButtons() {
   last_d2_change = millis();
 
   bank_buttons_initialized = true;
-  Serial.println("Bank buttons initialized successfully.");
+  D_PRINTLN("Bank buttons initialized successfully.");
 }
 
 void setup() {
-  Serial.begin(115200);
+  D_BEGIN(115200);
   while (!Serial) {
     delay(10);
   }
-  Serial.println("2FA Sidecar Booting...");
+  D_PRINTLN("2FA Sidecar Booting...");
 
   pinMode(TFT_BACKLITE, OUTPUT);
   digitalWrite(TFT_BACKLITE, HIGH);
@@ -186,17 +191,17 @@ void setup() {
   digitalWrite(TFT_I2C_POWER, HIGH);
 
   delay(250);
-  Serial.println("TFT Power ON");
+  D_PRINTLN("TFT Power ON");
 
   pinMode(TFT_RST, OUTPUT);
   digitalWrite(TFT_RST, LOW);
   delay(10);
   digitalWrite(TFT_RST, HIGH);
   delay(10);
-  Serial.println("Manual TFT Reset performed.");
+  D_PRINTLN("Manual TFT Reset performed.");
 
   tft.init(135, 240);
-  Serial.println("TFT Initialized");
+  D_PRINTLN("TFT Initialized");
 
   tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
@@ -207,13 +212,13 @@ void setup() {
   tft.setTextWrap(true);
   tft.printf("\n2FA-Sidecar Ver %s\nBy Matt Perkins & fujiba\n", mainver);
   tft.printf("Press K1 to enter config/test\n");
-  Serial.println("Boot screen displayed. Waiting for K1 press...");
+  D_PRINTLN("Boot screen displayed. Waiting for K1 press...");
 
   int lcount = 0;
   while (lcount < 140) {
     key1.update();
     if (key1.isClick()) {
-      Serial.println("K1 pressed, entering setup_test()...");
+      D_PRINTLN("K1 pressed, entering setup_test()...");
       setup_test();
       ESP.restart();
     }
@@ -222,7 +227,7 @@ void setup() {
     lcount++;
   }
 
-  Serial.println("Continuing to normal boot...");
+  D_PRINTLN("Continuing to normal boot...");
   tft.setFont(&FreeSans9pt7b);
   tft.fillScreen(ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
@@ -233,7 +238,7 @@ void setup() {
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
   pin = preferences.getString("pin", "");
-  Serial.println("Preferences loaded.");
+  D_PRINTLN("Preferences loaded.");
 
   for (int b = 0; b < NUM_BANKS; b++) {
     for (int k = 0; k < NUM_KEYS; k++) {
@@ -243,14 +248,14 @@ void setup() {
       tfa_seed[b][k] = preferences.getString(seed_key.c_str(), "");
     }
   }
-  Serial.println("All bank settings loaded.");
+  D_PRINTLN("All bank settings loaded.");
 
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi...");
+  D_PRINT("Connecting to WiFi...");
   sline = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
-    Serial.print(".");
+    D_PRINT(".");
     tft.printf("Establishing WiFi\n");
     sline = sline + 1;
     if (sline > 4) {
@@ -260,7 +265,7 @@ void setup() {
       sline = 0;
     }
   }
-  Serial.println(" Connected!");
+  D_PRINTLN(" Connected!");
   tft.print("IP: ");
   tft.println(WiFi.localIP());
   tft.print("Wifi: ");
@@ -272,11 +277,11 @@ void setup() {
   time_t t = time(NULL);
   tft.printf(":%lld", t);
   tft.println();
-  Serial.println("NTP configured.");
+  D_PRINTLN("NTP configured.");
 
   const char* npin = pin.c_str();
   if (strlen(npin) > 3) {
-    Serial.println("PIN is set, waiting for input.");
+    D_PRINTLN("PIN is set, waiting for input.");
     tft.setCursor(25, 25);
     tft.setFont(&FreeSans12pt7b);
     tft.fillScreen(ST77XX_BLACK);
@@ -322,12 +327,12 @@ void setup() {
 
       if (pinno == 4) {
         if (in_pin == npin) {
-          Serial.println("PIN correct.");
+          D_PRINTLN("PIN correct.");
           tft.println();
           tft.println("Correct.");
           break;
         } else {
-          Serial.println("PIN incorrect, restarting.");
+          D_PRINTLN("PIN incorrect, restarting.");
           tft.println();
           tft.print("Incorrect!");
           delay(pindelay);
@@ -350,7 +355,7 @@ void setup() {
   tft.fillScreen(ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
   updateotp = 1;
-  Serial.println("Setup complete, entering loop().");
+  D_PRINTLN("Setup complete, entering loop().");
 }
 
 void loop() {
@@ -370,19 +375,19 @@ void loop() {
         current_bank != 0) {
       current_bank = 0;
       bank_changed = true;
-      Serial.println("Bank 1 Selected");
+      D_PRINTLN("Bank 1 Selected");
     }
     if (checkButtonPress(1, prev_d1_state, last_d1_change) &&
         current_bank != 1) {
       current_bank = 1;
       bank_changed = true;
-      Serial.println("Bank 2 Selected");
+      D_PRINTLN("Bank 2 Selected");
     }
     if (checkButtonPress(2, prev_d2_state, last_d2_change) &&
         current_bank != 2) {
       current_bank = 2;
       bank_changed = true;
-      Serial.println("Bank 3 Selected");
+      D_PRINTLN("Bank 3 Selected");
     }
   }
 

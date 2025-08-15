@@ -155,20 +155,20 @@ void setup_test() {
 }
 
 void wifi_setup() {
-  Serial.println("Entering wifi_setup()...");
+  D_PRINTLN("Entering wifi_setup()...");
   WiFi.mode(WIFI_AP);
-  Serial.println("WiFi mode set to AP.");
+  D_PRINTLN("WiFi mode set to AP.");
 
   WiFi.softAP(ssid);
-  Serial.println("Soft AP started.");
+  D_PRINTLN("Soft AP started.");
 
   tft.setCursor(3, 35);
   tft.fillScreen(ST77XX_RED);
   tft.printf("Connect via Wifi\nSSID:%s\nthen browse to \nhttp://192.168.4.1",
              ssid.c_str());
-  Serial.println("TFT message displayed.");
+  D_PRINTLN("TFT message displayed.");
 
-  Serial.println("Setting up server routes...");
+  D_PRINTLN("Setting up server routes...");
   server.on("/", HTTP_GET, []() {
     String html = FPSTR(HTML_HEADER);
 
@@ -197,10 +197,10 @@ void wifi_setup() {
     html += HTML_FOOTER;
     server.send(200, "text/html", html);
   });
-  Serial.println("'/' route configured.");
+  D_PRINTLN("'/' route configured.");
 
   server.on("/get", HTTP_GET, []() {
-    Serial.println("Received GET request to save settings...");
+    D_PRINTLN("Received GET request to save settings...");
     preferences.begin("2FA_Sidecar", false);
     String log = "";
     int saved_count = 0;
@@ -216,7 +216,7 @@ void wifi_setup() {
     if (log.length() > 2) {
       log = log.substring(0, log.length() - 2);
     }
-    Serial.printf("%d parameters saved.\n", saved_count);
+    D_PRINTF("%d parameters saved.\n", saved_count);
 
     tft.fillScreen(ST77XX_BLUE);
     tft.setCursor(5, 30);
@@ -234,21 +234,21 @@ void wifi_setup() {
     delay(3000);
     ESP.restart();
   });
-  Serial.println("'/get' route configured.");
+  D_PRINTLN("'/get' route configured.");
 
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
-  Serial.println("'notFound' route configured.");
+  D_PRINTLN("'notFound' route configured.");
 
   server.begin();
-  Serial.println("Web server started.");
+  D_PRINTLN("Web server started.");
 
-  Serial.println("Setup mode active. Entering 10-minute wait loop...");
+  D_PRINTLN("Setup mode active. Entering 10-minute wait loop...");
   unsigned long setup_start_time = millis();
   while (millis() - setup_start_time < 600000) {  // 10 minute timeout
     server.handleClient();
     delay(10);
   }
 
-  Serial.println("Setup timeout reached. Rebooting.");
+  D_PRINTLN("Setup timeout reached. Rebooting.");
   ESP.restart();
 }
