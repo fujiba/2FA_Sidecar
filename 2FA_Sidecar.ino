@@ -53,8 +53,9 @@ const char* mainver = "1.50f";  // Version updated
 #include <WiFi.h>
 #endif
 #include <ArduinoOTA.h>
-#include <ESPAsyncWebSrv.h>
+// #include <ESPAsyncWebSrv.h>
 #include <ESPmDNS.h>
+#include <WebServer.h>
 #include <lwip/apps/sntp.h>
 
 #include <TOTP-RC6236-generator.hpp>
@@ -91,7 +92,8 @@ int pinno = 0;
 String in_pin;
 int pindelay = 3000;
 
-AsyncWebServer server(80);
+// AsyncWebServer server(80);
+WebServer server(80);
 
 String ssid = "Key-Sidecar";
 String password;
