@@ -29,7 +29,7 @@
 // --- DEBUG LOGGING for Arduino IDE ---
 // Uncomment the line below to enable serial debug logging.
 // Comment it out to disable.
-// #define DEBUG_LOG_ENABLED
+#define DEBUG_LOG_ENABLED
 
 #define NUM_KEYS DEVICE_MODE
 
@@ -37,7 +37,7 @@
 #define NTP_SERVER "ntp.jst.mfeed.ad.jp"
 #define TZ "JST-9"
 
-const char* mainver = "1.50f";  // Version updated
+const char* mainver = "1.51f";  // Version updated
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -180,9 +180,6 @@ void initializeBankButtons() {
 
 void setup() {
   D_BEGIN(115200);
-  while (!Serial) {
-    delay(10);
-  }
   D_PRINTLN("2FA Sidecar Booting...");
 
   pinMode(TFT_BACKLITE, OUTPUT);

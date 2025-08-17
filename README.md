@@ -23,6 +23,7 @@ The 2FA Sidecar is compatible with any platform that supports USB HID (Human Int
 - 1.10 Includes new PIN for access after bootup.
 - 1.11 Added the mini 2 key version with slight change to the code to select at compile time.
 - 1.50f Added support for multiple banks and a bank switching button.(by fujiba)
+- 1.51f fix: Prevent infinite loop on serial connection wait
 
 The system is made up of a 5 Key or 2 Key sidecar 3d model that will house an Adafruit Feather S3 Reverse module and 5 Cherry MX type keys It's a fairly simple project to print and build and you should be able to finish it off in a few hours. (including the printing)
 
